@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .  # Build từ thư mục chứa Dockerfile
+      dockerfile: Dockerfile
+    container_name: nestjs_backend
+    ports:
+      - "3000:3000"  # Map cổng 3000 máy host -> 3000 container
+    volumes:
+      - .:/app       # Mount code để live-reload (dành cho dev)
+      - /app/node_modules  # Giữ nguyên node_modules trong container
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=mongodb://mongodb:27017/nestdb  # Kết nối tới MongoDB service
+    depends_on:
+      - mongodb
+    restart: unless-stopped
+
+  mongodb:
+    image: mongo:6.0  # MongoDB phiên bản mới nhất (hoặc 5.0, 4.4 tùy chọn)
+    container_name: mongodb
+    ports:
+      - "27017:27017"  # Map cổng MongoDB ra host (tuỳ chọn)
+    volumes:
+      - mongodb_data:/data/db  # Lưu trữ dữ liệu MongoDB
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin  # Tuỳ chọn: Tạo user admin
+      - MONGO_INITDB_ROOT_PASSWORD=password
+    restart: unless-stopped
+
+volumes:
+  mongodb_data:  # Volume để MongoDB lưu dữ liệu
