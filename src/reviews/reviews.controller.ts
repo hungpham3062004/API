@@ -10,6 +10,7 @@ import {
   Post,
   Query,
   Request,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -27,6 +28,7 @@ import {
 } from './dto/review-response.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
 import { ReviewsService } from './reviews.service';
+import { AdminAuthGuard } from '../common/guards/admin-auth.guard';
 
 @ApiTags('Reviews')
 @Controller('reviews')
@@ -69,6 +71,18 @@ export class ReviewsController {
   })
   async findAll(@Query() query: ReviewQueryDto): Promise<ReviewsResponseDto> {
     return this.reviewsService.findAll(query);
+  }
+
+  @Get(':productId')
+  @ApiOperation({ summary: 'Get approved reviews for a product' })
+  @ApiParam({ name: 'productId', description: 'Product ID' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Approved reviews for product',
+    type: ReviewsResponseDto,
+  })
+  async getProductApproved(@Param('productId') productId: string): Promise<ReviewsResponseDto> {
+    return this.reviewsService.findAll({ productId, status: 'approved', page: 1, limit: 50 } as any);
   }
 
   @Get('product/:productId/stats')
@@ -171,6 +185,7 @@ export class ReviewsController {
     type: ReviewResponseDto,
   })
   @ApiBearerAuth()
+  @UseGuards(AdminAuthGuard)
   async approveReview(
     @Param('id') id: string,
     @Request() req: any,
@@ -178,6 +193,25 @@ export class ReviewsController {
   ): Promise<ReviewResponseDto> {
     const adminId = req.user?.adminId || req.user?.userId;
     return this.reviewsService.approveReview(id, adminId, approveDto);
+  }
+
+  @Patch(':id/reject')
+  @ApiOperation({ summary: 'Reject a review (Admin only)' })
+  @ApiParam({ name: 'id', description: 'Review ID' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Review rejected',
+    type: ReviewResponseDto,
+  })
+  @ApiBearerAuth()
+  @UseGuards(AdminAuthGuard)
+  async rejectReview(
+    @Param('id') id: string,
+    @Request() req: any,
+    @Body() approveDto: ApproveReviewDto,
+  ): Promise<ReviewResponseDto> {
+    const adminId = req.user?.adminId || req.user?.userId;
+    return this.reviewsService.approveReview(id, adminId, { ...approveDto, isApproved: false });
   }
 
   @Patch(':id/helpful')
@@ -190,6 +224,20 @@ export class ReviewsController {
   })
   async markHelpful(@Param('id') id: string): Promise<ReviewResponseDto> {
     return this.reviewsService.markHelpful(id);
+  }
+
+  @Delete(':id/admin')
+  @ApiOperation({ summary: 'Delete a review (Admin only)' })
+  @ApiParam({ name: 'id', description: 'Review ID' })
+  @ApiResponse({
+    status: HttpStatus.NO_CONTENT,
+    description: 'Review deleted successfully',
+  })
+  @ApiBearerAuth()
+  @UseGuards(AdminAuthGuard)
+  async deleteReview(@Param('id') id: string, @Request() req: any): Promise<void> {
+    const adminId = req.user?.adminId || req.user?.userId;
+    return this.reviewsService.deleteReviewByAdmin(id, adminId);
   }
 
   // DEBUG ENDPOINT - Returns debug info in response

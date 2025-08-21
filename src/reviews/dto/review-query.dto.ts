@@ -3,6 +3,10 @@ import { Transform } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class ReviewQueryDto {
+  @ApiProperty({ required: false, description: 'Search in product name, customer name, title, or comment' })
+  @IsOptional()
+  search?: string;
+
   @ApiProperty({ required: false, description: 'Product ID to filter reviews' })
   @IsOptional()
   @IsMongoId()
@@ -21,11 +25,9 @@ export class ReviewQueryDto {
   @Max(5)
   rating?: number;
 
-  @ApiProperty({ required: false, description: 'Filter by approval status' })
+  @ApiProperty({ required: false, description: 'Filter by status', enum: ['pending', 'approved', 'rejected'] })
   @IsOptional()
-  @Transform(({ value }) => value === 'true')
-  @IsBoolean()
-  isApproved?: boolean;
+  status?: 'pending' | 'approved' | 'rejected';
 
   @ApiProperty({ required: false, description: 'Page number', default: 1 })
   @IsOptional()
@@ -41,4 +43,12 @@ export class ReviewQueryDto {
   @Min(1)
   @Max(100)
   limit?: number = 10;
+
+  @ApiProperty({ required: false, description: 'Sort by field', default: 'reviewDate' })
+  @IsOptional()
+  sortBy?: string = 'reviewDate';
+
+  @ApiProperty({ required: false, description: 'Sort order', enum: ['asc', 'desc'], default: 'desc' })
+  @IsOptional()
+  sortOrder?: 'asc' | 'desc' = 'desc';
 }

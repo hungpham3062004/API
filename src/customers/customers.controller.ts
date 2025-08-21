@@ -481,6 +481,32 @@ export class CustomersController {
     };
   }
 
+  @Patch(':id/comment-lock')
+  @ApiOperation({ summary: 'Khóa bình luận của khách hàng' })
+  @ApiParam({ name: 'id', type: String, description: 'ID khách hàng' })
+  async lockCustomerComment(@Param('id') id: string) {
+    const customer = await this.customersService.update(id, { isCommentLocked: true } as any);
+    return {
+      success: true,
+      message: 'Đã khóa bình luận của khách hàng',
+      data: customer,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  @Patch(':id/comment-unlock')
+  @ApiOperation({ summary: 'Mở khóa bình luận của khách hàng' })
+  @ApiParam({ name: 'id', type: String, description: 'ID khách hàng' })
+  async unlockCustomerComment(@Param('id') id: string) {
+    const customer = await this.customersService.update(id, { isCommentLocked: false } as any);
+    return {
+      success: true,
+      message: 'Đã mở khóa bình luận của khách hàng',
+      data: customer,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
   @Post('refresh-token')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({

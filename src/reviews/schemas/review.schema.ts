@@ -26,8 +26,12 @@ export class Review {
   @Prop({ default: Date.now })
   reviewDate: Date;
 
-  @Prop({ default: false })
-  isApproved: boolean;
+  @Prop({
+    type: String,
+    enum: ['pending', 'approved', 'rejected'],
+    default: 'pending',
+  })
+  status: 'pending' | 'approved' | 'rejected';
 
   @Prop({ type: Types.ObjectId, ref: 'Admin', default: null })
   approvedBy: Types.ObjectId;
@@ -56,7 +60,7 @@ export const ReviewSchema = SchemaFactory.createForClass(Review);
 
 // Indexes for better performance
 ReviewSchema.index({ productId: 1, customerId: 1 }, { unique: true }); // One review per customer per product
-ReviewSchema.index({ productId: 1, isApproved: 1 });
+ReviewSchema.index({ productId: 1, status: 1 });
 ReviewSchema.index({ customerId: 1 });
 ReviewSchema.index({ reviewDate: -1 });
 ReviewSchema.index({ rating: 1 });

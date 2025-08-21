@@ -40,6 +40,15 @@ export class ReviewsService {
       productId,
     );
 
+    // 0. Check if customer is comment-locked
+    const customer: any = await this.customerModel.findById(customerId).lean();
+    if (!customer) {
+      throw new NotFoundException('Khách hàng không tồn tại');
+    }
+    if (customer.isCommentLocked) {
+      throw new ForbiddenException('Tài khoản này đã bị khóa bình luận');
+    }
+
     // 1. Verify order exists and belongs to customer
     const orderQueries = [
       {
@@ -108,7 +117,7 @@ export class ReviewsService {
       throw new BadRequestException('Bạn đã đánh giá sản phẩm này rồi');
     }
 
-    // 4. Create the review
+    // 4. Create the review with pending approval
     const review = new this.reviewModel({
       productId: new Types.ObjectId(productId),
       customerId: new Types.ObjectId(customerId),
@@ -119,7 +128,7 @@ export class ReviewsService {
       images: images || [],
       reviewDate: new Date(),
       isVerifiedPurchase: true,
-      isApproved: false, // Require admin approval
+      status: 'pending',
     });
 
     const savedReview = await review.save();
@@ -128,40 +137,106 @@ export class ReviewsService {
 
   async findAll(query: ReviewQueryDto): Promise<ReviewsResponseDto> {
     const {
+      search,
       productId,
       customerId,
       rating,
-      isApproved,
+      status,
       page = 1,
       limit = 10,
-    } = query;
+      sortBy = 'reviewDate',
+      sortOrder = 'desc',
+    } = query as any;
 
     const filter: any = {};
 
     if (productId) filter.productId = new Types.ObjectId(productId);
     if (customerId) filter.customerId = new Types.ObjectId(customerId);
     if (rating) filter.rating = rating;
-    if (isApproved !== undefined) filter.isApproved = isApproved;
+    if (status) filter.status = status;
 
     const skip = (page - 1) * limit;
 
+    // Build aggregation pipeline for search functionality
+    const pipeline: any[] = [];
+
+    // Match stage
+    if (Object.keys(filter).length > 0) {
+      pipeline.push({ $match: filter });
+    }
+
+    // Search stage
+    if (search) {
+      pipeline.push({
+        $lookup: {
+          from: 'products',
+          localField: 'productId',
+          foreignField: '_id',
+          as: 'product'
+        }
+      });
+      pipeline.push({
+        $lookup: {
+          from: 'customers',
+          localField: 'customerId',
+          foreignField: '_id',
+          as: 'customer'
+        }
+      });
+      pipeline.push({
+        $match: {
+          $or: [
+            { 'product.productName': { $regex: search, $options: 'i' } },
+            { 'customer.fullName': { $regex: search, $options: 'i' } },
+            { title: { $regex: search, $options: 'i' } },
+            { comment: { $regex: search, $options: 'i' } }
+          ]
+        }
+      });
+    }
+
+    // Add lookup stages for population
+    pipeline.push({
+      $lookup: {
+        from: 'products',
+        localField: 'productId',
+        foreignField: '_id',
+        as: 'productId'
+      }
+    });
+    pipeline.push({
+      $lookup: {
+        from: 'customers',
+        localField: 'customerId',
+        foreignField: '_id',
+        as: 'customerId'
+      }
+    });
+
+    // Unwind arrays
+    pipeline.push({ $unwind: '$productId' });
+    pipeline.push({ $unwind: '$customerId' });
+
+    // Sort and pagination
+    const sortDirection = sortOrder === 'asc' ? 1 : -1;
+    pipeline.push({ $sort: { [sortBy]: sortDirection } });
+    pipeline.push({ $skip: skip });
+    pipeline.push({ $limit: limit });
+
+    // Execute pipeline
     const [reviews, total] = await Promise.all([
-      this.reviewModel
-        .find(filter)
-        .populate('customerId', 'fullName')
-        .populate('productId', 'productName')
-        .sort({ reviewDate: -1 })
-        .skip(skip)
-        .limit(limit)
-        .exec(),
-      this.reviewModel.countDocuments(filter),
+      this.reviewModel.aggregate(pipeline),
+      search ? this.reviewModel.aggregate([...pipeline.slice(0, -2), { $count: 'total' }]) : this.reviewModel.countDocuments(filter),
     ]);
 
-    const totalPages = Math.ceil(total / limit);
+    // Extract total count
+    const totalCount = search ? (total[0]?.total || 0) : total;
+
+    const totalPages = Math.ceil(totalCount / limit);
 
     return {
       reviews: reviews.map((review) => this.mapToResponseDto(review)),
-      total,
+      total: totalCount,
       page,
       limit,
       totalPages,
@@ -169,17 +244,35 @@ export class ReviewsService {
   }
 
   async findOne(id: string): Promise<ReviewResponseDto> {
-    const review = await this.reviewModel
-      .findById(id)
-      .populate('customerId', 'fullName')
-      .populate('productId', 'productName')
-      .exec();
+    const pipeline = [
+      { $match: { _id: new Types.ObjectId(id) } },
+      {
+        $lookup: {
+          from: 'products',
+          localField: 'productId',
+          foreignField: '_id',
+          as: 'productId'
+        }
+      },
+      {
+        $lookup: {
+          from: 'customers',
+          localField: 'customerId',
+          foreignField: '_id',
+          as: 'customerId'
+        }
+      },
+      { $unwind: '$productId' },
+      { $unwind: '$customerId' }
+    ];
 
-    if (!review) {
+    const reviews = await this.reviewModel.aggregate(pipeline);
+    
+    if (!reviews || reviews.length === 0) {
       throw new NotFoundException('Đánh giá không tồn tại');
     }
 
-    return this.mapToResponseDto(review);
+    return this.mapToResponseDto(reviews[0]);
   }
 
   async update(
@@ -198,12 +291,7 @@ export class ReviewsService {
       throw new ForbiddenException('Bạn không có quyền chỉnh sửa đánh giá này');
     }
 
-    // Don't allow editing approved reviews
-    if (review.isApproved) {
-      throw new BadRequestException(
-        'Không thể chỉnh sửa đánh giá đã được duyệt',
-      );
-    }
+    // Allow editing regardless of approval state (approval removed)
 
     Object.assign(review, updateReviewDto);
     const updatedReview = await review.save();
@@ -238,7 +326,7 @@ export class ReviewsService {
       throw new NotFoundException('Đánh giá không tồn tại');
     }
 
-    review.isApproved = approveDto.isApproved;
+    review.status = approveDto.isApproved ? 'approved' : 'rejected';
     review.approvedBy = new Types.ObjectId(adminId);
     review.approvedAt = new Date();
 
@@ -249,6 +337,19 @@ export class ReviewsService {
 
     const updatedReview = await review.save();
     return this.mapToResponseDto(updatedReview);
+  }
+
+  async deleteReviewByAdmin(id: string, adminId: string): Promise<void> {
+    const review = await this.reviewModel.findById(id);
+
+    if (!review) {
+      throw new NotFoundException('Đánh giá không tồn tại');
+    }
+
+    // Log the deletion for audit purposes
+    console.log(`Admin ${adminId} deleted review ${id}`);
+    
+    await this.reviewModel.findByIdAndDelete(id);
   }
 
   async markHelpful(id: string): Promise<ReviewResponseDto> {
@@ -269,7 +370,7 @@ export class ReviewsService {
   async getProductReviewStats(productId: string) {
     const stats = await this.reviewModel.aggregate([
       {
-        $match: { productId: new Types.ObjectId(productId), isApproved: true },
+        $match: { productId: new Types.ObjectId(productId), status: 'approved' },
       },
       {
         $group: {
@@ -442,14 +543,14 @@ export class ReviewsService {
   private mapToResponseDto(review: any): ReviewResponseDto {
     return {
       _id: review._id.toString(),
-      productId: review.productId.toString(),
-      customerId: review.customerId.toString(),
+      productId: review.productId._id?.toString() || review.productId.toString(),
+      customerId: review.customerId._id?.toString() || review.customerId.toString(),
       orderId: review.orderId.toString(),
       rating: review.rating,
       title: review.title,
       comment: review.comment,
       reviewDate: review.reviewDate,
-      isApproved: review.isApproved,
+      status: review.status,
       approvedBy: review.approvedBy?.toString(),
       approvedAt: review.approvedAt,
       response: review.response,
@@ -461,14 +562,16 @@ export class ReviewsService {
       updatedAt: review.updatedAt,
       customer: review.customerId?.fullName
         ? {
-            _id: review.customerId._id.toString(),
-            fullName: review.customerId?.fullName,
+            _id: review.customerId._id?.toString() || review.customerId.toString(),
+            fullName: review.customerId.fullName,
+            email: review.customerId.email,
           }
         : undefined,
       product: review.productId?.productName
         ? {
-            _id: review.productId._id.toString(),
+            _id: review.productId._id?.toString() || review.productId.toString(),
             productName: review.productId.productName,
+            images: review.productId.images || [],
           }
         : undefined,
     };

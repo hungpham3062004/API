@@ -90,6 +90,18 @@ export class Customer {
   isLocked?: boolean;
 
   @Prop({
+    type: Boolean,
+    default: false,
+  })
+  @ApiProperty({
+    description: 'Bị khóa bình luận (không thể bình luận sản phẩm)',
+    example: false,
+    default: false,
+    required: false,
+  })
+  isCommentLocked?: boolean;
+
+  @Prop({
     type: String,
     default: null,
   })

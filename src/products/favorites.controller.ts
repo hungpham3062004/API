@@ -34,6 +34,16 @@ export class FavoritesController {
     return this.favoritesService.addToFavorites(createFavoriteDto);
   }
 
+  @Post('add-and-list')
+  @ApiOperation({ summary: 'Add product to favorites and return updated favorites list' })
+  @ApiResponse({ status: 201, description: 'Updated favorites list', type: FavoritesResponseDto })
+  async addFavoriteAndList(
+    @Body() createFavoriteDto: CreateFavoriteDto,
+  ): Promise<FavoritesResponseDto> {
+    const { customerId, productId } = createFavoriteDto;
+    return this.favoritesService.addFavoriteProduct(customerId, productId);
+  }
+
   @Delete()
   @ApiOperation({ summary: 'Remove product from favorites' })
   @ApiResponse({ status: 200, description: 'Product removed from favorites' })

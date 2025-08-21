@@ -66,6 +66,55 @@ export class FavoritesService {
     return this.getFavoriteWithPopulatedData((savedFavorite._id as any).toString());
   }
 
+  /**
+   * Add a product to a customer's favorites without creating duplicates.
+   * If the favorite already exists and is inactive, it will be reactivated.
+   * Returns the customer's latest favorites list after the operation.
+   */
+  async addFavoriteProduct(
+    customerId: string,
+    productId: string,
+  ): Promise<FavoritesResponseDto> {
+    // Validate customer and product existence
+    const [customer, product] = await Promise.all([
+      this.customerModel.findById(customerId),
+      this.productModel.findById(productId),
+    ]);
+
+    if (!customer) {
+      throw new NotFoundException('Customer not found');
+    }
+    if (!product) {
+      throw new NotFoundException('Product not found');
+    }
+
+    // Check existing favorite
+    const existingFavorite = await this.favoriteModel.findOne({
+      customerId: new Types.ObjectId(customerId),
+      productId: new Types.ObjectId(productId),
+    });
+
+    if (existingFavorite) {
+      if (!existingFavorite.isActive) {
+        existingFavorite.isActive = true;
+        existingFavorite.addedAt = new Date();
+        await existingFavorite.save();
+      }
+      // If already active, no-op
+    } else {
+      // Create new favorite
+      await this.favoriteModel.create({
+        customerId: new Types.ObjectId(customerId),
+        productId: new Types.ObjectId(productId),
+        addedAt: new Date(),
+        isActive: true,
+      });
+    }
+
+    // Return latest favorites list (page 1, newest first)
+    return this.getCustomerFavorites(customerId, 1, 50, undefined, 'addedAt', 'desc');
+  }
+
   async removeFromFavorites(removeFavoriteDto: RemoveFavoriteDto): Promise<void> {
     const { customerId, productId } = removeFavoriteDto;
 

@@ -25,8 +25,8 @@ export class ReviewResponseDto {
   @ApiProperty()
   reviewDate: Date;
 
-  @ApiProperty()
-  isApproved: boolean;
+  @ApiProperty({ enum: ['pending', 'approved', 'rejected'] })
+  status: 'pending' | 'approved' | 'rejected';
 
   @ApiProperty({ required: false })
   approvedBy?: string;
@@ -60,6 +60,7 @@ export class ReviewResponseDto {
   customer?: {
     _id: string;
     fullName: string;
+    email: string;
   };
 
   // Populated product info
@@ -67,6 +68,7 @@ export class ReviewResponseDto {
   product?: {
     _id: string;
     productName: string;
+    images: string[];
   };
 }
 
