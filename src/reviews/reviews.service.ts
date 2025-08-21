@@ -524,7 +524,7 @@ export class ReviewsService {
           _id: existingReview._id,
           rating: existingReview.rating,
           title: existingReview.title,
-          isApproved: existingReview.isApproved,
+          status: existingReview.status,
         });
       }
 

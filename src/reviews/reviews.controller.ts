@@ -73,17 +73,8 @@ export class ReviewsController {
     return this.reviewsService.findAll(query);
   }
 
-  @Get(':productId')
-  @ApiOperation({ summary: 'Get approved reviews for a product' })
-  @ApiParam({ name: 'productId', description: 'Product ID' })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: 'Approved reviews for product',
-    type: ReviewsResponseDto,
-  })
-  async getProductApproved(@Param('productId') productId: string): Promise<ReviewsResponseDto> {
-    return this.reviewsService.findAll({ productId, status: 'approved', page: 1, limit: 50 } as any);
-  }
+  // Note: Using the query-based endpoint /reviews?productId=...&status=approved to avoid
+  // conflicting with the dynamic route ":id" used by get-by-id
 
   @Get('product/:productId/stats')
   @ApiOperation({ summary: 'Get review statistics for a product' })

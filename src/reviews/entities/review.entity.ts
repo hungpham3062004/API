@@ -7,7 +7,7 @@ export class Review {
   title: string;
   comment: string;
   reviewDate: Date;
-  isApproved: boolean;
+  status: 'pending' | 'approved' | 'rejected';
   approvedBy?: string;
   approvedAt?: Date;
   response?: string;
